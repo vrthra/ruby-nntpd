@@ -75,11 +75,9 @@ module NNTPD
         def handle_xover(range)
             return reply(:numeric, ERR_NOGROUPSELECTED, 'no group selected') if !@current_group
             range = @current_article_id if !range
-            anum = 1
             reply :numeric, RPL_ALIST, 'list of article numbers follows'
-            @current_group[range].each do |article|
-                reply :raw, anum.to_s + "\t" + article.overview
-                anum += 1
+            @current_group.range(range) do |num,article|
+                reply :raw, num.to_s + "\t" + article.overview
             end
             reply :done
         end
@@ -191,7 +189,7 @@ module NNTPD
                 @socket.print arg.strip + "\n" if !arg.nil?
             rescue Exception => e
                 carp "<#{e.message}"
-                puts e.backtrace.join("\n")
+                #puts e.backtrace.join("\n")
                 handle_abort()
                 raise e if abrt
             end
