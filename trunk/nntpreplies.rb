@@ -1,15 +1,16 @@
 module NNTPReplies
 RPL_PWELCOME		= 200 #server ready - posting allowed
 RPL_WELCOME         = 201 #server ready - no posting allowed
+RPL_STREAM          = 203 # streaming ok
 #   202 slave status noted
 RPL_QUIT            = 205 #closing connection - goodbye!
 RPL_GSELECT         = 211 #n f l s group selected
 RPL_GLIST           = 215 #list of newsgroups follows
-RPL_ARTICLE         = 220 #n <a> article retrieved - head and body follow 221 n <a> article
-#   retrieved - head follows
-#   222 n <a> article retrieved - body follows
-#   223 n <a> article retrieved - request text separately 230 list of new
-#   articles by message-id follows
+RPL_ARTICLE         = 220 #n <a> article retrieved - head and body follow 
+RPL_HEAD            = 221 #n <a> article  retrieved - head follows
+RPL_BODY            = 222 #n <a> article retrieved - body follows
+RPL_STAT            = 223 #n <a> article retrieved - request text separately 
+RPL_NEWNEWS         = 230 #list of new articles by message-id follows
 RPL_ALIST           = 224 #XOVER
 RPL_NEWGROUPS       = 231 #list of new newsgroups follows
 #   235 article transferred ok
@@ -20,7 +21,7 @@ RPL_SENDPOST        = 340 #send article to be posted. End with <CR-LF>.<CR-LF>
 #
 #   400 service discontinued
 ERR_NOSUCHGROUP     = 411 #no such news group
-#   412 no newsgroup has been selected
+ERR_NOGROUPSELECTED = 412 #no newsgroup has been selected
 #   420 no current article has been selected
 #   421 no next article in this group
 #   422 no previous article in this group
