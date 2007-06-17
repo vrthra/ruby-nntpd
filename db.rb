@@ -113,25 +113,40 @@ module NNTPD
             @lock.synchronize { return @articles.length}
         end
 
-        def [](range)
+        def [](r)
+            return range(r)
+        end
+
+        def range(range,&p)
             #range may be [nil | NNN | NNN- | NNN-MMM]
+            arr = []
+            first = 0
+            last = 0
             @lock.synchronize {
                 first = @first
                 last = @last
                 case range.strip
                 when /^([\d]+)$/
                     num = $1.strip.to_i
-                    return num && @articles[num - 1] ? [@articles[num - 1]] : []
+                    arr = num && @articles[num - 1] ? [@articles[num - 1]] : []
                 when /^([\d]+)-$/
                     first = $1.strip.to_i
+                    arr = @articles[first-1 .. last-1]
                 when /^([\d]+)-([\d]+)$/
                     first = $1.strip.to_i
                     last = $2.strip.to_i
+                    arr = @articles[first-1 .. last-1]
                 end
-                return @articles[first-1 .. last-1]
+                return arr if !p
             }
+            if arr.length
+                arr.each do |a|
+                    yield first, a
+                    first += 1
+                end
+            end
         end
-
+        
         #numarticles firstarticle lastarticle nameofgroup
         def status
             return size > 0 ? "#{size} #{first} #{last} #{name}" : "0 0 0 #{name}"
