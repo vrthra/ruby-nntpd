@@ -15,12 +15,9 @@ module NNTPD
             range, path = PatLogCache.getpath(article)
             lines = File.open(path).readlines
             r = CatArticle.parselog(lines)
-            p range
-            p range.first 
-            p article
             tc = r[article.to_i - range.first]
             h,hdr,body,lines,size = CatArticle.get_tc_content(tc)
-            return hdr + body.join("\r\n")
+            return hdr + body.join("")
         end
 
         def PatLogCache.register(range, file)
@@ -97,7 +94,7 @@ module NNTPD
                 headers.each {|k,v| h[k] = v} # make a copy
                 h[:'message-id'] = headers[:'message-id'].sub(/\./,".#{i.to_s}.")
                 h[:reference] = headers[:'message-id']
-                h[:subject] = t[:subject] + " #{t[:status]? 'passed' : 'failed'}"
+                h[:subject] = t[:subject].strip + " #{t[:status]? 'passed' : 'failed'}"
                 r << {:headers => h, :body => t[:body]}
             end
             return r
@@ -106,7 +103,7 @@ module NNTPD
         def CatArticle.get_tc_content(tc)
             headers = tc[:headers]
             body = tc[:body]
-            b = body.join("\r\n")
+            b = body.join("")
             hdr = headers.inject('') {|acc,kv| kv[0].to_s.capitalize + ': ' + kv[1] + "\r\n" + acc} + "\r\n"
             lines = headers.size + body.length + 1
             size = hdr.length + b.length
@@ -146,6 +143,7 @@ module NNTPD
         end
 
         def writearticle(path, buf)
+            File.open(path,'w+') {|fd| fd.print buf}
         end
     end
 
@@ -162,7 +160,7 @@ module NNTPD
             # iterate throu path, registering each article we find
             print "Loading cat #{@name} #{path}"
             Dir.mkdir path rescue puts "+"
-            Dir[path + '/*'].each do |afile|
+            Dir[path + '/*'].sort{|a,b|File.basename(a).to_i <=>File.basename(b).to_i}.each do |afile|
                 @startid = File.basename(afile).to_i
                 puts "\tarticle #{afile}"
                 begin
@@ -187,6 +185,13 @@ module NNTPD
         def register(aid,article)
             @lock.synchronize { @articles[aid] = ArticleHolder.new(article, @path + '/' + aid) }
         end
+
+        def sizeupdate(last)
+            @lock.synchronize {
+                @size = last
+                @last = last
+            }
+        end
         
         def [](range)
             #range may be [nil | NNN | NNN- | NNN-MMM]
@@ -210,9 +215,27 @@ module NNTPD
             }
         end
 
-        def <<(article)
-            puts "In parsecat."
-            add(article)
+        def add(p,article,buf)
+            startid = size + 1
+            aid = startid
+            path = p + '/' + aid.to_s
+
+            File.open(path,'w+') {|fd| fd.print buf}
+
+            articles = CatArticle.parse(buf.split("\n"))
+            articles.each do |article|
+                register(aid.to_s,article) # keeps only the overview information
+                aid+=1
+            end
+            # we need to register ourselves too.
+            PatLogCache.register(startid .. aid, path)
+            sizeupdate(aid-1)
+
+            return ArticleHolder.new(article, @path)
+        end
+
+        def push(article,buf)
+            add(@path,article,buf)
         end
         def status
             return size > 0 ? "#{size} #{first} #{last} #{name}" : "0 0 0 #{name}"
