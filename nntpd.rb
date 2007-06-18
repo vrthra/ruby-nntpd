@@ -88,7 +88,7 @@ module NNTPD
                 reply :numeric, RPL_SENDPOST, 'send the post, end with .'
                 buf = []
                 while (s = @socket.gets).strip !~ /^\.$/
-                    buf << s
+                    buf << s.strip
                 end
                 db.write(buf)
                 reply :numeric, RPL_POSTOK, 'post completed.'
@@ -270,7 +270,7 @@ end
 if __FILE__ == $0
     $config ||= {}
     $config['version'] = '0.01dev'
-    $config['port'] = 1119
+    $config['port'] = 119
     $verbose = ARGV.shift || false
 
     s = NNTPD::NNTPServer.new( :Port => $config['port'] )

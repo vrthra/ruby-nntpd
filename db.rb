@@ -84,7 +84,7 @@ module NNTPD
             return @article.getarticle(@path)
         end
         def dump(buf)
-            return @article.writearticle(path,buf)
+            return @article.writearticle(@path,buf)
         end
         def method_missing(m,*args)
             @article.send(m,*args)
@@ -128,10 +128,10 @@ module NNTPD
             @lock.synchronize { @articles[aid] = ArticleHolder.new(article, @path + '/' + aid) }
         end
 
-        def <<(article)
-            add(article)
+        def push(article,buf)
+            add(article,buf).dump(buf)
         end
-        def add(article)
+        def add(article,buf)
             @lock.synchronize {
                 aid = (@first + @articles.size + 1).to_s
                 return  @articles[aid] = ArticleHolder.new(article, @path + '/' + aid)
@@ -218,7 +218,7 @@ module NNTPD
             article,str = Article.parse(buf, true)
             article.newsgroups.each do |gname|
                 if self[gname]
-                    (self[gname] << article).dump(str)
+                    self[gname].push(article,str)
                 else
                     raise 'No such news group'
                 end

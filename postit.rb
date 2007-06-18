@@ -2,10 +2,14 @@ require 'date'
 date = DateTime.now().strftime(fmt='%a, %d %b %Y %T %z')
 msgstr = <<END_OF_MESSAGE
 From: Your Name <your@mail.address>
-Newsgroups: news.hive.talk, news.hive.run, news.cat.logs
+Newsgroups: news.hive.talk, news.hive.run
 Subject: test message
 Date: #{date}
 
+This is a test message.
+This is a test message.
+This is a test message.
+This is a test message.
 This is a test message.
 END_OF_MESSAGE
 
