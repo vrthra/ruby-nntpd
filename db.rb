@@ -1,12 +1,13 @@
 require 'thread'
 require 'yaml'
+require 'catfile'
 module NNTPD
     # representation of an article.
     # Used to parse an article that was posted or to load an article that was
     # stored to disk.
 
     class Article
-        def initialize(headers, body, size, lines)
+        def initialize(headers, size, lines)
             @newsgroups = headers[:newsgroups].split(/\s*,\s*/)
             @size = size
             #anum   subject  from   date   <msgid>   <ref>   size  lines
@@ -36,7 +37,7 @@ module NNTPD
             str = (headers.inject('') {|acc,kv|
                 kv[0].to_s.capitalize + ': ' + kv[1] + "\r\n" + acc} + "\r\n" + body.join("\r\n"))
             lines = body.length + headers.keys.length + 1
-            return Article.new(headers, body, str.length, lines), str
+            return Article.new(headers, str.length, lines), str
         end
 
         def newsgroups
@@ -53,8 +54,6 @@ module NNTPD
                 return @size
             when :lines
                 return @lines
-            when :body
-                return @body
             else
                 return @headers[var] || ' '
             end
@@ -64,6 +63,16 @@ module NNTPD
             return (@overview ||= @format.collect {|fmt| self[fmt]}).join("\t")
         end
 
+        # each article type is responsible for reading and writing its own type.
+        def getarticle(path)
+            return File.open(path).read
+        end
+        
+        def writearticle(path, buf)
+            File.open(path,'w+') {|f|
+                f.print buf
+            }
+        end
     end
 
     class ArticleHolder
@@ -72,12 +81,10 @@ module NNTPD
             @path = path
         end
         def to_s
-            return File.open(@path).read
+            return @article.getarticle(@path)
         end
         def dump(buf)
-            File.open(@path,'w+') {|f|
-                f.print buf
-            }
+            return @article.writearticle(path,buf)
         end
         def method_missing(m,*args)
             @article.send(m,*args)
@@ -113,20 +120,18 @@ module NNTPD
         end
 
         def Group.load(name,path,config)
-            return Group.new(name,path,config)
+            gklass = eval(config[:loader] || 'Group')
+            return gklass.new(name,path,config)
         end
 
-        # The group.parse comes into play when a message is posted to this
-        # group. You can plug in custom parsers here.
-
-        def Group.dump()
-        end
-        
         def register(aid,article)
             @lock.synchronize { @articles[aid] = ArticleHolder.new(article, @path + '/' + aid) }
         end
 
         def <<(article)
+            add(article)
+        end
+        def add(article)
             @lock.synchronize {
                 aid = (@first + @articles.size + 1).to_s
                 return  @articles[aid] = ArticleHolder.new(article, @path + '/' + aid)
@@ -207,6 +212,17 @@ module NNTPD
         end
         def groups
             return @db
+        end
+
+        def write(buf)
+            article,str = Article.parse(buf, true)
+            article.newsgroups.each do |gname|
+                if self[gname]
+                    (self[gname] << article).dump(str)
+                else
+                    raise 'No such news group'
+                end
+            end
         end
     end
 end
