@@ -76,8 +76,9 @@ module NNTPD
             return reply(:numeric, ERR_NOGROUPSELECTED, 'no group selected') if !@current_group
             range = @current_article_id if !range
             reply :numeric, RPL_ALIST, 'list of article numbers follows'
-            @current_group[range].each do |aid,article|
-                reply :raw, aid+ "\t" + article.overview
+            articles = @current_group[range]
+            articles.keys.sort{|a,b| a.to_i <=> b.to_i}.each do |aid|
+                reply :raw, aid+ "\t" + articles[aid].overview
             end
             reply :done
         end
@@ -89,15 +90,7 @@ module NNTPD
                 while (s = @socket.gets).strip !~ /^\.$/
                     buf << s
                 end
-
-                article,str = Article.parse(buf, true)
-                article.newsgroups.each do |gname|
-                    if db[gname]
-                        (db[gname] << article).dump(str)
-                    else
-                        raise 'No such news group'
-                    end
-                end
+                db.write(buf)
                 reply :numeric, RPL_POSTOK, 'post completed.'
             rescue Exception => e
                 reply :numeric, ERR_NOSUCHGROUP, " error: #{e.message}."
@@ -193,7 +186,7 @@ module NNTPD
                 @socket.print arg.strip + "\n" if !arg.nil?
             rescue Exception => e
                 carp "<#{e.message}"
-                #puts e.backtrace.join("\n")
+                puts e.backtrace.join("\n")
                 handle_abort()
                 raise e if abrt
             end
