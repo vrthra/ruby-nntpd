@@ -1,15 +1,18 @@
 require 'thread'
+require 'yaml'
 module NNTPD
     # representation of an article.
     # Used to parse an article that was posted or to load an article that was
     # stored to disk.
 
     class Article
-        def initialize(headers, body)
-            @headers = headers
-            @body = body
+        def initialize(headers, body, size, lines)
+            @newsgroups = headers[:newsgroups].split(/\s*,\s*/)
+            @size = size
             #anum   subject  from   date   <msgid>   <ref>   size  lines
             @format = [:subject, :from, :date, :'message-id', :reference, :size, :lines]
+            @headers = headers.reject{|k,v| !@format.include?(k)}
+            @lines = lines
         end
 
         def Article.parse(lines, update_msgid=false)
@@ -29,19 +32,15 @@ module NNTPD
                     body << line
                 end
             end
-            if update_msgid
-                headers[:'message-id'] = DB.guid
-            end
-            return Article.new(headers, body)
-        end
-
-        def []=(name, value)
-            @all = @overview = nil
-            @headers[name.downcase.intern] = value
+            headers[:'message-id'] = DB.guid if update_msgid
+            str = (headers.inject('') {|acc,kv|
+                kv[0].to_s.capitalize + ': ' + kv[1] + "\r\n" + acc} + "\r\n" + body.join("\r\n"))
+            lines = body.length + headers.keys.length + 1
+            return Article.new(headers, body, str.length, lines), str
         end
 
         def newsgroups
-            return (@newsgroups ||= @headers[:newsgroups].split(/\s*,\s*/))
+            return @newsgroups
         end
 
         def msgid
@@ -51,9 +50,9 @@ module NNTPD
         def [](var)
             case var
             when :size
-                return (@size ||= to_s.length)
+                return @size
             when :lines
-                return (@lines ||= @body.length + @headers.keys.length + 1)
+                return @lines
             when :body
                 return @body
             else
@@ -65,9 +64,23 @@ module NNTPD
             return (@overview ||= @format.collect {|fmt| self[fmt]}).join("\t")
         end
 
+    end
+
+    class ArticleHolder
+        def initialize(article, path)
+            @article = article
+            @path = path
+        end
         def to_s
-            return (@all ||= @headers.inject('') {|acc,kv|
-                kv[0].to_s.capitalize + ': ' + kv[1] + "\r\n" + acc} + "\r\n" + @body.join("\r\n"))
+            return File.open(@path).read
+        end
+        def dump(buf)
+            File.open(@path,'w+') {|f|
+                f.print buf
+            }
+        end
+        def method_missing(m,*args)
+            @article.send(m,*args)
         end
     end
 
@@ -76,27 +89,48 @@ module NNTPD
     class Group
         attr_reader :name
 
-        def initialize(name)
+        def initialize(name,path,config)
+            # config : name description creation date
             @name = name
-            @articles = []
+            @articles = {}
             @lock = Mutex.new
             @first = @last = 0
+            @config = config
+            @path = path
+            # iterate throu path, registering each article we find
+            print "Loading group #{@name} #{path}"
+            Dir.mkdir path rescue puts "+"
+            Dir[path + '/*'].each do |afile|
+                begin
+                    article,str = Article.parse(File.open(afile).readlines)
+                    print "."
+                    register(File.basename(afile),article) # keeps only the overview information
+                rescue
+                    puts "Invalid article #{afile}"
+                end
+            end
+            puts ""
         end
 
-        def Group.create(name)
-            return Group.new(name)
+        def Group.load(name,path,config)
+            return Group.new(name,path,config)
         end
 
         # The group.parse comes into play when a message is posted to this
         # group. You can plug in custom parsers here.
-        def Group.parse(file)
-        end
 
         def Group.dump()
         end
+        
+        def register(aid,article)
+            @lock.synchronize { @articles[aid] = ArticleHolder.new(article, @path + '/' + aid) }
+        end
 
-        def << (article)
-            @lock.synchronize { @articles << article }
+        def <<(article)
+            @lock.synchronize {
+                aid = (@first + @articles.size + 1).to_s
+                return  @articles[aid] = ArticleHolder.new(article, @path + '/' + aid)
+            }
         end
 
         def first
@@ -104,47 +138,35 @@ module NNTPD
         end
         
         def last
-            @lock.synchronize { return @first + @articles.length }
+            @lock.synchronize { return @first + @articles.size }
         end
         
         private :first ,:last
 
         def size
-            @lock.synchronize { return @articles.length}
+            @lock.synchronize { return @articles.size}
         end
 
-        def [](r)
-            return range(r)
-        end
-
-        def range(range,&p)
+        def [](range)
             #range may be [nil | NNN | NNN- | NNN-MMM]
-            arr = []
-            first = 0
-            last = 0
             @lock.synchronize {
                 first = @first
                 last = @last
                 case range.strip
                 when /^([\d]+)$/
                     num = $1.strip.to_i
-                    arr = num && @articles[num - 1] ? [@articles[num - 1]] : []
+                    return @articles.reject{|k,v| k.to_i != num}
                 when /^([\d]+)-$/
                     first = $1.strip.to_i
-                    arr = @articles[first-1 .. last-1]
+                    return @articles.reject {|k,v| k.to_i < first}
                 when /^([\d]+)-([\d]+)$/
                     first = $1.strip.to_i
                     last = $2.strip.to_i
-                    arr = @articles[first-1 .. last-1]
+                    return @articles.reject {|k,v| k.to_i < first || k.to_i > last}
+                else
+                    raise "invalid range"
                 end
-                return arr if !p
             }
-            if arr.length
-                arr.each do |a|
-                    yield first, a
-                    first += 1
-                end
-            end
         end
         
         #numarticles firstarticle lastarticle nameofgroup
@@ -163,14 +185,19 @@ module NNTPD
     end
 
     class DB
-        def DB.create(location=nil)
-            return DB.new()
+        def DB.load(location=nil)
+            return DB.new(location)
         end
         def DB.guid
             return "<#{Time.now.to_f}@#{Socket.gethostname}>"
         end
-        def initialize
+        def initialize(location)
             @db = {}
+            # loadup the config.yaml which contains supported groups
+            config = YAML::load_file(location + '/config.yaml')
+            config.keys.each do |groupname|
+                self[groupname] = Group.load(groupname,location + '/' + groupname, config[groupname])
+            end
         end
         def []=(name, group)
             @db[name.intern] = group

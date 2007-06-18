@@ -76,8 +76,8 @@ module NNTPD
             return reply(:numeric, ERR_NOGROUPSELECTED, 'no group selected') if !@current_group
             range = @current_article_id if !range
             reply :numeric, RPL_ALIST, 'list of article numbers follows'
-            @current_group.range(range) do |num,article|
-                reply :raw, num.to_s + "\t" + article.overview
+            @current_group[range].each do |aid,article|
+                reply :raw, aid+ "\t" + article.overview
             end
             reply :done
         end
@@ -90,10 +90,10 @@ module NNTPD
                     buf << s
                 end
 
-                article = Article.parse(buf, true)
+                article,str = Article.parse(buf, true)
                 article.newsgroups.each do |gname|
                     if db[gname]
-                        db[gname] << article
+                        (db[gname] << article).dump(str)
                     else
                         raise 'No such news group'
                     end
@@ -101,13 +101,16 @@ module NNTPD
                 reply :numeric, RPL_POSTOK, 'post completed.'
             rescue Exception => e
                 reply :numeric, ERR_NOSUCHGROUP, " error: #{e.message}."
+                puts e.message
+                puts e.backtrace
             end
         end
 
         # does not handle <msgid> yet
         def handle_article(num)
             return reply( :numeric, ERR_NOSUCHARTICLE, "no such article found") if !@current_group
-            article = @current_group[num ? num : @current_article ][0]
+            @current_article_id = num.to_i if num
+            article = @current_group[@current_article_id.to_s].values[0]
             if article
                 reply :numeric, RPL_ARTICLE, "#{num} #{article.msgid} article retrieved - head and body follow"
                 reply :raw, article.to_s
@@ -120,7 +123,8 @@ module NNTPD
         # does not handle <msgid> yet
         def handle_stat(num)
             return reply( :numeric, ERR_NOSUCHARTICLE, "no such article found") if !@current_group
-            article = @current_group[num ? @current_article : num][0]
+            @current_article_id = num.to_i if num
+            article = @current_group[@current_article_id.to_s].values[0]
             if article
                 reply :numeric, RPL_STAT, "#{num} #{article.msgid} article retrieved"
                 reply :raw, article
@@ -277,10 +281,7 @@ if __FILE__ == $0
     $verbose = ARGV.shift || false
 
     s = NNTPD::NNTPServer.new( :Port => $config['port'] )
-    db = NNTPD::DB.create()
-    db['news.cat.run'] = NNTPD::Group.new('news.cat.run')
-    db['news.hive.run'] = NNTPD::Group.new('news.hive.run')
-    db['news.hive.talk'] = NNTPD::Group.new('news.hive.talk')
+    db = NNTPD::DB.load('/tmp/ruby-nntpd')
     s.db(db)
 
     begin

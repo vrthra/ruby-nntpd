@@ -10,7 +10,12 @@ This is a test message.
 END_OF_MESSAGE
 
 require 'net/nntp'
-Net::NNTP.start('vayavyam.india.sun.com', 1119) do |nntp|
-    nntp.post msgstr
+begin
+    puts "connect to  #{ARGV[0] || 119}"
+    Net::NNTP.start('vayavyam.india.sun.com', ARGV[0] || 119 ) do |nntp|
+        nntp.post msgstr
+    end
+rescue Exception => e
+    puts e.message
 end
  
