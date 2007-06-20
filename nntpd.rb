@@ -5,23 +5,7 @@ require 'nntpreplies'
 require 'netutils'
 require 'db'
 
-#   ARTICLE
-#   BODY
-#   GROUP
-#   HEAD
-#   HELP
-#   IHAVE
-#   LAST
-#   LIST
-#   NEWGROUPS
-#   NEWNEWS
-#   NEXT
-#   POST
-#   QUIT
-#   SLAVE
-#   STAT
-#
-#   XOVER
+#   ARTICLE BODY GROUP HEAD HELP IHAVE LAST LIST NEWGROUPS NEWNEWS NEXT POST QUIT SLAVE STAT XOVER
 
 include NNTPReplies
 
@@ -35,26 +19,12 @@ module NNTPD
             @socket = sock
             @db = db
             @current_article_id = 1
-            carp "initializing connection from #{peer}"
         end
 
         def closed?
             return @socket.nil? || @socket.closed?
         end
-
-        def peer
-            begin
-                sockaddr = @socket.getpeername
-                begin
-                    return Socket.getnameinfo(sockaddr, Socket::NI_NAMEREQD).first
-                rescue
-                    return Socket.getnameinfo(sockaddr).first
-                end
-            rescue
-                return @socket.peeraddr[2]
-            end
-        end
-
+        
         def handle_group(param)
             @current_group = db[param]
             if @current_group
@@ -77,8 +47,8 @@ module NNTPD
             range = @current_article_id if !range
             reply :numeric, RPL_ALIST, 'list of article numbers follows'
             articles = @current_group[range]
-            articles.keys.sort{|a,b| a.to_i <=> b.to_i}.each do |aid|
-                reply :raw, aid+ "\t" + articles[aid].overview
+            articles.keys.sort.each do |aid|
+                reply :raw, aid.to_s + "\t" + articles[aid].overview
             end
             reply :done
         end
@@ -87,8 +57,8 @@ module NNTPD
             begin
                 reply :numeric, RPL_SENDPOST, 'send the post, end with .'
                 buf = []
-                while (s = @socket.gets).strip !~ /^\.$/
-                    buf << s.strip
+                while ((s = @socket.gets.strip) !~ /^\.$/)
+                    buf << s
                 end
                 db.write(buf)
                 reply :numeric, RPL_POSTOK, 'post completed.'
@@ -185,8 +155,7 @@ module NNTPD
                 carp "--> #{arg}"
                 @socket.print arg.strip + "\n" if !arg.nil?
             rescue Exception => e
-                carp "<#{e.message}"
-                puts e.backtrace.join("\n")
+                carp e
                 handle_abort()
                 raise e if abrt
             end
@@ -202,10 +171,6 @@ module NNTPD
             nntp_listen(sock, client)
         end
 
-        def db(db)
-            @db = db
-        end
-
         def nntp_listen(sock, client)
             begin
                 while !sock.closed? && !sock.eof?
@@ -216,6 +181,10 @@ module NNTPD
                 carp e
             end
             client.handle_abort()
+        end
+
+        def db(d)
+            @db = d
         end
 
         def handle_client_input(input, client)
@@ -266,11 +235,10 @@ module NNTPD
     end
 end
 
-
 if __FILE__ == $0
     $config ||= {}
     $config['version'] = '0.01dev'
-    $config['port'] = 119
+    $config['port'] = 1119
     $verbose = ARGV.shift || false
 
     s = NNTPD::NNTPServer.new( :Port => $config['port'] )
