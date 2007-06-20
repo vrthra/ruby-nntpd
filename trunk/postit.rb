@@ -1,16 +1,12 @@
 require 'date'
 date = DateTime.now().strftime(fmt='%a, %d %b %Y %T %z')
 msgstr = <<END_OF_MESSAGE
-From: Your Name <your@mail.address>
+From: Mexico <me@mail.address>
 Newsgroups: news.hive.talk, news.hive.run
-Subject: test message
+Subject: abc2
 Date: #{date}
 
-This is a test message.
-This is a test message.
-This is a test message.
-This is a test message.
-This is a test message.
+Abc
 END_OF_MESSAGE
 
 require 'net/nntp'
