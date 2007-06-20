@@ -139,7 +139,7 @@ module NNTPD
             tcases,summary= parser.parse(body)
             # create summary header and body first
             headers[:subject] = summary.subject
-            r = [{:headers => headers, :body => summary.body}]
+            r = [{:headers => headers, :body => ["\r\n"] + summary.body}]
             #do the same for each cases
             (0..(tcases.length - 1)).each do |i|
                 t = tcases[i]
@@ -148,7 +148,7 @@ module NNTPD
                     :reference => headers[:'message-id'],
                     :subject => t.subject
                 })
-                r << {:headers => h, :body => t.body}
+                r << {:headers => h, :body => ["\r\n"] + t.body}
             end
             return r
         end
@@ -200,7 +200,7 @@ module NNTPD
 
         def add(aid,article)
                 # if we dont have first yet, update it.
-                @first ||= aid
+                @first = aid if !@first
                 #this is our last article.
                 @last = aid
                 return (@articles[@last] = ArticleHolder.new(@last,article,@path))
