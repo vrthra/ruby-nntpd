@@ -14,6 +14,8 @@
 # == Author(s)
 #
 # * George Moschovitis
+# Shamelessly lifted from here:
+# http://facets.rubyforge.org/src/lib/facets/more/lrucache.rb
 
 # Author::    George Moschovitis, Anastasios Koutoumanos
 # Copyright:: Copyright (c) 2005 George Moschovitis
