@@ -19,7 +19,7 @@ module NNTPD
                 :'message-id' => DB.guid,
                 :'date' => Time.now.gmtime.to_s
             }) if update_msgid
-            str = Util.get_content(headers,body)
+            str = Util.get_content(headers, ["\r\n"] + body)
             lines = body.length + headers.keys.length + 1
             return Article.new(headers, str.length, lines), str
         end
